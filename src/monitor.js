@@ -1,97 +1,94 @@
-cat > src/monitor.js << 'ENDOFFILE'
-const cron = require("node-cron");
-const api = require("./api");
-const { checkNodeStatusChanges, notifyDailySummary, timestamp, separator } = require("./notifier");
+var cron = require("node-cron");
+var api = require("./api");
+var notifier = require("./notifier");
 
-function printNodeStatus(nodes) {
-  console.log("\n  🖧  STATUS NODE");
-  console.log(separator());
+function printNodes(nodes) {
+  console.log("\n  STATUS NODE");
+  console.log(notifier.sep("-"));
   if (!nodes || nodes.length === 0) {
-    console.log("  Tidak ada node yang ditemukan.");
+    console.log("  Tidak ada node ditemukan.");
     return;
   }
-  for (const node of nodes) {
-    const name   = node.name || node.nodeId || "Unknown";
-    const status = (node.status || "unknown").toLowerCase();
-    const uptime = node.uptime || node.uptimeHours || "-";
-    const type   = node.type || node.nodeType || "-";
-    const nat    = node.natType || "-";
-    const icon   = status === "online" ? "🟢" : "🔴";
-    console.log(`  ${icon} ${name}`);
-    console.log(`     Status  : ${status}`);
-    console.log(`     Tipe    : ${type}`);
-    console.log(`     Uptime  : ${uptime}`);
-    console.log(`     NAT     : ${nat}`);
-    console.log();
+  for (var i = 0; i < nodes.length; i++) {
+    var n = nodes[i];
+    var status = (n.status || "unknown").toLowerCase();
+    var icon = status === "online" ? "[ON] " : "[OFF]";
+    console.log(
+      "  " + icon + " " + (n.name || n.nodeId || "Unknown") +
+      " | Tipe: " + (n.type || "-") +
+      " | Uptime: " + (n.uptime || "-") +
+      " | NAT: " + (n.natType || "-")
+    );
   }
+  console.log("");
 }
 
 function printRewards(rewards) {
   if (!rewards) return;
-  const jade  = rewards.jade || rewards.totalJade || rewards.balance || "-";
-  const today = rewards.todayEarned || rewards.dailyEarned || "-";
-  const total = rewards.totalEarned || "-";
-  console.log("  💎 REWARDS");
-  console.log(separator());
-  console.log(`  Jade Balance   : ${jade}`);
-  console.log(`  Earned Hari Ini: ${today}`);
-  console.log(`  Total Earned   : ${total}`);
-  console.log();
+  console.log("  REWARDS");
+  console.log(notifier.sep("-"));
+  console.log("  Jade Balance   : " + (rewards.jade || rewards.totalJade || rewards.balance || "-"));
+  console.log("  Earned Hari Ini: " + (rewards.todayEarned || rewards.dailyEarned || "-"));
+  console.log("  Total Earned   : " + (rewards.totalEarned || "-"));
+  console.log("");
 }
 
-async function runMonitorCycle(isFirst = false) {
+async function runCycle(isFirst) {
   try {
     await api.ensureValidToken();
-    const [nodes, rewards] = await Promise.all([
-      api.getNodes().catch(() => null),
-      api.getRewards().catch(() => null),
+    var results = await Promise.all([
+      api.getNodes().catch(function() { return null; }),
+      api.getRewards().catch(function() { return null; }),
     ]);
-    console.log("\n" + separator("═"));
-    console.log(`  ARO NETWORK MONITOR  —  ${timestamp()}`);
-    console.log(separator("═"));
-    const nodeList = Array.isArray(nodes) ? nodes : nodes?.list || nodes?.nodes || [];
-    printNodeStatus(nodeList);
+    var nodes = results[0];
+    var rewards = results[1];
+
+    console.log("\n" + notifier.sep("="));
+    console.log("  ARO NETWORK MONITOR  -  " + notifier.ts());
+    console.log(notifier.sep("="));
+
+    var list = Array.isArray(nodes) ? nodes : (nodes && nodes.list) || (nodes && nodes.nodes) || [];
+    printNodes(list);
     printRewards(rewards);
-    checkNodeStatusChanges(nodeList);
-    if (isFirst) console.log("  (Monitoring dimulai — perubahan status akan dinotifikasi)\n");
+    notifier.checkNodeStatusChanges(list);
+
+    if (isFirst) {
+      console.log("  Monitoring aktif. Notifikasi akan muncul jika node berubah status.\n");
+    }
   } catch (err) {
-    console.error("\n  ❌ Error pada siklus monitoring:", err.message);
+    console.error("  Error monitoring:", err.message);
   }
 }
 
-function scheduleDailySummary() {
-  const enabled = process.env.NOTIFY_DAILY_SUMMARY !== "false";
-  if (!enabled) return;
-  const hour = parseInt(process.env.DAILY_SUMMARY_HOUR || "8", 10);
-  cron.schedule(`0 ${hour} * * *`, async () => {
-    try {
-      await api.ensureValidToken();
-      const [profile, nodes, rewards] = await Promise.all([
-        api.getProfile().catch(() => null),
-        api.getNodes().catch(() => null),
-        api.getRewards().catch(() => null),
-      ]);
-      const nodeList = Array.isArray(nodes) ? nodes : nodes?.list || nodes?.nodes || [];
-      notifyDailySummary(profile, nodeList, rewards);
-    } catch (err) {
-      console.error("❌ Gagal kirim daily summary:", err.message);
-    }
-  });
-  console.log(`  📅 Daily summary dijadwalkan setiap hari jam ${hour}:00\n`);
-}
-
 async function startMonitor() {
-  const intervalMin = parseInt(process.env.MONITOR_INTERVAL_MINUTES || "5", 10);
-  console.log("  ╔══════════════════════════════════════════╗");
-  console.log("  ║       ARO NETWORK NODE MONITOR           ║");
-  console.log("  ╚══════════════════════════════════════════╝");
-  console.log(`  Interval check : setiap ${intervalMin} menit`);
-  console.log(`  API Base URL   : ${process.env.ARO_API_BASE || "https://api.aro.network"}`);
-  scheduleDailySummary();
-  await runMonitorCycle(true);
-  cron.schedule(`*/${intervalMin} * * * *`, () => runMonitorCycle(false));
-  console.log("  🕐 Monitor berjalan... (Ctrl+C untuk berhenti)\n");
+  var min = parseInt(process.env.MONITOR_INTERVAL_MINUTES || "5", 10);
+  var hour = parseInt(process.env.DAILY_SUMMARY_HOUR || "8", 10);
+
+  console.log("  +==================================+");
+  console.log("  |   ARO NETWORK NODE MONITOR       |");
+  console.log("  +==================================+");
+  console.log("  Interval : setiap " + min + " menit");
+  console.log("  API URL  : " + (process.env.ARO_API_BASE || "https://api.aro.network"));
+
+  if (process.env.NOTIFY_DAILY_SUMMARY !== "false") {
+    cron.schedule("0 " + hour + " * * *", async function() {
+      try {
+        await api.ensureValidToken();
+        var p = await api.getProfile().catch(function() { return null; });
+        var n = await api.getNodes().catch(function() { return null; });
+        var r = await api.getRewards().catch(function() { return null; });
+        var list = Array.isArray(n) ? n : (n && n.list) || [];
+        notifier.notifyDailySummary(p, list, r);
+      } catch (e) {
+        console.error("Daily summary error:", e.message);
+      }
+    });
+    console.log("  Daily summary jam " + hour + ":00 aktif.");
+  }
+
+  await runCycle(true);
+  cron.schedule("*/" + min + " * * *", function() { runCycle(false); });
+  console.log("  Monitor berjalan... (Ctrl+C untuk berhenti)\n");
 }
 
 module.exports = { startMonitor };
-ENDOFFILE
