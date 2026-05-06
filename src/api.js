@@ -1,30 +1,29 @@
-cat > src/api.js << 'ENDOFFILE'
-const axios = require("axios");
-const fs = require("fs");
-const path = require("path");
+var axios = require("axios");
+var fs = require("fs");
+var path = require("path");
 
-const BASE_URL = process.env.ARO_API_BASE || "https://api.aro.network";
-const TOKEN_CACHE_FILE = path.join(__dirname, "../.token_cache.json");
+var BASE_URL = process.env.ARO_API_BASE || "https://api.aro.network";
+var CACHE_FILE = path.join(__dirname, "../.token_cache.json");
 
-function saveTokenCache(data) {
-  fs.writeFileSync(TOKEN_CACHE_FILE, JSON.stringify(data, null, 2));
+function saveCache(data) {
+  fs.writeFileSync(CACHE_FILE, JSON.stringify(data, null, 2));
 }
 
 function loadTokenCache() {
   try {
-    if (fs.existsSync(TOKEN_CACHE_FILE)) {
-      return JSON.parse(fs.readFileSync(TOKEN_CACHE_FILE, "utf-8"));
+    if (fs.existsSync(CACHE_FILE)) {
+      return JSON.parse(fs.readFileSync(CACHE_FILE, "utf-8"));
     }
-  } catch (_) {}
+  } catch (e) {}
   return null;
 }
 
-function isTokenExpired(cache) {
+function isExpired(cache) {
   if (!cache || !cache.expiresAt) return true;
   return Date.now() >= cache.expiresAt - 5 * 60 * 1000;
 }
 
-const client = axios.create({
+var client = axios.create({
   baseURL: BASE_URL,
   timeout: 15000,
   headers: {
@@ -35,23 +34,23 @@ const client = axios.create({
   },
 });
 
-client.interceptors.request.use((config) => {
-  const cache = loadTokenCache();
-  const token = cache?.token || process.env.ARO_TOKEN;
-  if (token) config.headers["Authorization"] = `Bearer ${token}`;
+client.interceptors.request.use(function(config) {
+  var cache = loadTokenCache();
+  var token = (cache && cache.token) || process.env.ARO_TOKEN;
+  if (token) config.headers["Authorization"] = "Bearer " + token;
   return config;
 });
 
 client.interceptors.response.use(
-  (res) => res,
-  async (error) => {
-    const original = error.config;
-    if (error.response?.status === 401 && !original._retry) {
+  function(res) { return res; },
+  async function(error) {
+    var original = error.config;
+    if (error.response && error.response.status === 401 && !original._retry) {
       original._retry = true;
-      console.log("⚠️  Token expired — mencoba refresh otomatis...");
-      const newToken = await refreshToken();
-      if (newToken) {
-        original.headers["Authorization"] = `Bearer ${newToken}`;
+      console.log("Token expired, refresh otomatis...");
+      var t = await refreshToken();
+      if (t) {
+        original.headers["Authorization"] = "Bearer " + t;
         return client(original);
       }
     }
@@ -60,54 +59,79 @@ client.interceptors.response.use(
 );
 
 async function login() {
-  const email = process.env.ARO_EMAIL;
-  const password = process.env.ARO_PASSWORD;
-  if (!email || !password) throw new Error("ARO_EMAIL dan ARO_PASSWORD harus diisi di .env");
-  const res = await axios.post(`${BASE_URL}/auth/login`, { email, password }, {
-    headers: { "Content-Type": "application/json", Origin: "https://dashboard.aro.network" },
-    timeout: 15000,
+  var email = process.env.ARO_EMAIL;
+  var password = process.env.ARO_PASSWORD;
+  if (!email || !password) {
+    throw new Error("ARO_EMAIL dan ARO_PASSWORD harus diisi di .env");
+  }
+  var res = await axios.post(
+    BASE_URL + "/auth/login",
+    { email: email, password: password },
+    {
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "https://dashboard.aro.network",
+      },
+      timeout: 15000,
+    }
+  );
+  var data = res.data;
+  var token =
+    (data && data.token) ||
+    (data && data.data && data.data.token) ||
+    (data && data.accessToken) ||
+    (data && data.data && data.data.accessToken);
+  var expiresIn =
+    (data && data.expiresIn) ||
+    (data && data.data && data.data.expiresIn) ||
+    3600;
+  if (!token) throw new Error("Token tidak ditemukan dalam response.");
+  saveCache({
+    token: token,
+    email: email,
+    expiresAt: Date.now() + expiresIn * 1000,
+    refreshedAt: new Date().toISOString(),
   });
-  const data = res.data;
-  const token = data?.token || data?.data?.token || data?.accessToken || data?.data?.accessToken;
-  const expiresIn = data?.expiresIn || data?.data?.expiresIn || 3600;
-  if (!token) throw new Error("Token tidak ditemukan dalam response login.");
-  saveTokenCache({ token, email, expiresAt: Date.now() + expiresIn * 1000, refreshedAt: new Date().toISOString() });
   return token;
 }
 
 async function refreshToken() {
   try {
-    const token = await login();
-    console.log("✅ Token berhasil di-refresh.");
-    return token;
+    return await login();
   } catch (err) {
-    console.error("❌ Gagal refresh token:", err.message);
+    console.error("Gagal refresh token:", err.message);
     return null;
   }
 }
 
 async function ensureValidToken() {
-  const cache = loadTokenCache();
-  if (isTokenExpired(cache)) {
-    console.log("🔄 Token expired — login ulang...");
+  if (isExpired(loadTokenCache())) {
+    console.log("Token expired, login ulang...");
     await login();
   }
 }
 
 async function getProfile() {
-  const res = await client.get("/user/profile");
-  return res.data?.data || res.data;
+  var r = await client.get("/user/profile");
+  return (r.data && r.data.data) || r.data;
 }
 
 async function getNodes() {
-  const res = await client.get("/node/list");
-  return res.data?.data || res.data;
+  var r = await client.get("/node/list");
+  return (r.data && r.data.data) || r.data;
 }
 
 async function getRewards() {
-  const res = await client.get("/reward/summary");
-  return res.data?.data || res.data;
+  var r = await client.get("/reward/summary");
+  return (r.data && r.data.data) || r.data;
 }
 
-module.exports = { login, refreshToken, ensureValidToken, getProfile, getNodes, getRewards, loadTokenCache };
-ENDOFFILE
+module.exports = {
+  login: login,
+  refreshToken: refreshToken,
+  ensureValidToken: ensureValidToken,
+  getProfile: getProfile,
+  getNodes: getNodes,
+  getRewards: getRewards,
+  loadTokenCache: loadTokenCache,
+};
