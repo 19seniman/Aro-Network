@@ -14,7 +14,7 @@ function printNodes(nodes) {
     var status = (n.status || "unknown").toLowerCase();
     var icon = status === "online" ? "[ON] " : "[OFF]";
     console.log(
-      "  " + icon + " " + (n.name || n.nodeId || "Unknown") +
+      "  " + icon + (n.name || n.nodeId || "Unknown") +
       " | Tipe: " + (n.type || "-") +
       " | Uptime: " + (n.uptime || "-") +
       " | NAT: " + (n.natType || "-")
@@ -42,18 +42,15 @@ async function runCycle(isFirst) {
     ]);
     var nodes = results[0];
     var rewards = results[1];
-
     console.log("\n" + notifier.sep("="));
     console.log("  ARO NETWORK MONITOR  -  " + notifier.ts());
     console.log(notifier.sep("="));
-
     var list = Array.isArray(nodes) ? nodes : (nodes && nodes.list) || (nodes && nodes.nodes) || [];
     printNodes(list);
     printRewards(rewards);
     notifier.checkNodeStatusChanges(list);
-
     if (isFirst) {
-      console.log("  Monitoring aktif. Notifikasi akan muncul jika node berubah status.\n");
+      console.log("  Monitoring aktif. Notifikasi muncul jika node berubah status.\n");
     }
   } catch (err) {
     console.error("  Error monitoring:", err.message);
@@ -91,4 +88,4 @@ async function startMonitor() {
   console.log("  Monitor berjalan... (Ctrl+C untuk berhenti)\n");
 }
 
-module.exports = { startMonitor };
+module.exports = { startMonitor: startMonitor };
