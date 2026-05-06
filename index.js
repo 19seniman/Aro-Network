@@ -26,6 +26,13 @@ async function main() {
   await startMonitor();
 }
 
-process.on("SIGINT", () => { console.log("\nMonitor dihentikan."); process.exit(0); });
-process.on("uncaughtException", (err) => { console.error("Error:", err.message); });
+process.on("SIGINT", function() {
+  console.log("\nMonitor dihentikan.");
+  process.exit(0);
+});
+
+process.on("uncaughtException", function(err) {
+  console.error("Error:", err.message);
+});
+
 main();
