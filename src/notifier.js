@@ -32,15 +32,17 @@ function notifyRecovery(node) {
 }
 
 function notifyDailySummary(profile, nodes, rewards) {
-  var online = nodes.filter(function(n) { return n.status === "online"; }).length;
+  var online = nodes.filter(function(n) {
+    return n.status === "online";
+  }).length;
   console.log("\n" + sep("="));
   console.log("  RINGKASAN HARIAN ARO NETWORK");
-  console.log("  Akun   : " + ((profile && profile.email) || "-"));
-  console.log("  Waktu  : " + ts());
+  console.log("  Akun    : " + ((profile && profile.email) || "-"));
+  console.log("  Waktu   : " + ts());
   console.log(sep("-"));
-  console.log("  Total  : " + nodes.length + " | Online: " + online + " | Offline: " + (nodes.length - online));
+  console.log("  Total   : " + nodes.length + " | Online: " + online + " | Offline: " + (nodes.length - online));
   if (rewards) {
-    console.log("  Jade   : " + (rewards.jade || rewards.totalJade || rewards.balance || "-"));
+    console.log("  Jade    : " + (rewards.jade || rewards.totalJade || rewards.balance || "-"));
     console.log("  Hari ini: " + (rewards.todayEarned || rewards.dailyEarned || "-"));
   }
   console.log(sep("=") + "\n");
@@ -62,10 +64,10 @@ function checkNodeStatusChanges(nodes) {
 }
 
 module.exports = {
-  notifyOffline,
-  notifyRecovery,
-  notifyDailySummary,
-  checkNodeStatusChanges,
-  sep,
-  ts,
+  notifyOffline: notifyOffline,
+  notifyRecovery: notifyRecovery,
+  notifyDailySummary: notifyDailySummary,
+  checkNodeStatusChanges: checkNodeStatusChanges,
+  sep: sep,
+  ts: ts,
 };
